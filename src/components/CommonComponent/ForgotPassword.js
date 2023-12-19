@@ -70,6 +70,31 @@ const ForgotPassword = () => {
   };
 
   const sendEmail = (data) => {
+    //pending..
+    /*
+   const payload = {};
+   try{
+    const response = await API.DEMO(payload);
+    if (response) {
+          setOutputError(null);
+          setForgotPassword(true);
+          setLoader(false);
+        } else {
+          setOutputError(
+            "There is an issue to send the mail Please try again later."
+          );
+          setLoader(false);
+        }
+
+   }
+   catch (error){
+    setOutputError(
+          "There is an issue to send the mail Please try again later."
+        );
+        setLoader(false);
+
+    console.log(error);}
+    */
     axios
       .get(`${baseURL}/mailtoadmin`, {
         params: {
@@ -109,6 +134,29 @@ const ForgotPassword = () => {
   };
 
   const getUsersData = (userName) => {
+    //done...
+    /*
+   const payload = {
+      account_name: userName,
+      user_name: userName,
+   };
+   try{
+      const response = await API.getUserData(payload);
+      if (response?.data?.data) {
+          sendEmail(response?.data?.data[0]);
+        } else {
+          setOutputError(
+            "Invalid User Name. Please check the user Name again!"
+          );
+          setLoader(false);
+        }
+     
+   }
+   catch (error){
+       setOutputError("Invalid User Name. Please check the user Name again!");
+        setLoader(false);
+      console.log(error);}
+    */
     axios
       .get(`${baseURL}/${userName}`, {
         params: {
@@ -150,6 +198,32 @@ const ForgotPassword = () => {
     } else {
       setLoader(true);
       if (radio === "no") {
+        //done...
+        /*
+        const payload = {
+           account_name: redirectionUser,
+          email_id: details.email,
+        };
+        try{
+          const response = await API.getUserNameFromEmail(payload);
+          if (response?.data?.data?.length > 0) {
+              getUsersData(response?.data?.data[0]?.USERNAME);
+            } else {
+              setOutputError(
+                "Invalid Email Id. Please check the Email Id again!"
+              );
+              setLoader(false);
+            }
+          })
+        }
+        catch(error){
+          setOutputError(
+              "Invalid Email Id. Please check the Email Id again!"
+            );
+            setLoader(false);
+            console.log(error);
+        }
+        */
         axios
           .get(`${baseURL}/${redirectionUser}`, {
             params: {

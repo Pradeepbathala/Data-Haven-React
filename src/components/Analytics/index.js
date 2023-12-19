@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
 import { useDispatch, useSelector } from "react-redux";
 import { CircularProgress } from "@mui/material";
 
@@ -9,8 +8,7 @@ import * as actions from "../../redux/actions/index";
 
 import { analysticsTabs } from "../../utils/data";
 import MetaAdsAnalytics from "./components/metaAds";
-
-const baseURL = process.env.REACT_APP_BASE_URL;
+import API from "../../apiServices/api";
 
 const ChartPage = () => {
   const dispatch = useDispatch();
@@ -40,21 +38,26 @@ const ChartPage = () => {
           loader: true,
         })
       );
-      axios
-        .get(`${baseURL}/${user?.name}`, {
-          params: {
-            query: `select advertiser_match,age_0_6, age_7_16, age_17_25, age_26_40, age_41_above, male, female from DCR_SAMP_CONSUMER1.PUBLIC.advertiser_match_${RequestId}_insights;`,
-          },
-        })
-        .then((response) => {
-          if (response?.data?.data) {
+      const payload = {
+        account_name: user?.Consumer,
+        run_id: RequestId,
+        db_name: user?.consumerDBName,
+      };
+      const getAnalyticsData = async () => {
+        try {
+          let response = await API.getAnalyticsData(payload);
+          if (
+            response?.status === 200 &&
+            response?.data?.data &&
+            response?.data?.data?.length > 0
+          ) {
             let data = response?.data?.data[0];
             let age_data = [
               { name: "AGE_0_6", value: data?.AGE_0_6 },
               { name: "AGE_7_16", value: data?.AGE_7_16 },
               { name: "AGE_17_25", value: data?.AGE_17_25 },
               { name: "AGE_26_40", value: data?.AGE_26_40 },
-              { name: "AGE_41_ABOVE", value: data?.AGE_41_ABOVE },
+              { name: "AGE_40_ABOVE", value: data?.AGE_40_ABOVE },
             ];
             let gender_data = [
               { name: "MALE", value: data?.MALE },
@@ -85,8 +88,7 @@ const ChartPage = () => {
               loader: false,
             })
           );
-        })
-        .catch((error) => {
+        } catch (error) {
           console.log(error);
           setChartData({
             ...chartData,
@@ -99,7 +101,9 @@ const ChartPage = () => {
               loader: false,
             })
           );
-        });
+        }
+      };
+      getAnalyticsData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [RequestId, user?.name]);

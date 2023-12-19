@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
 import { toast } from "react-toastify";
 import { CircularProgress } from "@mui/material";
 
 import CommonModal from "../../CommonComponent/Modal";
-
-const baseURL = process.env.REACT_APP_BASE_URL;
+import API from "../../../apiServices/api";
 
 const AllowedColumns = ({ user }) => {
   const [publisherData, setPublisherData] = useState({
@@ -32,88 +30,95 @@ const AllowedColumns = ({ user }) => {
   //   UseEffect for Consumer List....
 
   useEffect(() => {
-    axios
-      .get(`${baseURL}/${user.name}`, {
-        params: {
-          query:
-            "select distinct CONSUMER_NAME from DCR_SAMP_PROVIDER_DB.TEMPLATES.DCR_TEMPLATES;",
-        },
-      })
-      .then((response) => {
-        if (response?.data) {
+    const getConsumerName = async () => {
+      const payload = {
+        account_name: user.name,
+        provider_database_name: user?.providerDBName,
+      };
+      try {
+        const response = await API.getConsumerName(payload);
+        if (response?.status === 200 && response?.data?.data) {
           setConsumers(response?.data?.data);
         } else {
           setConsumers([]);
         }
-      })
-      .catch((error) => console.log(error));
-  }, [user?.name]);
+      } catch (error) {
+        console.log(error);
+      }
+    };
+    getConsumerName();
+  }, [user.name, user?.providerDBName]);
 
   //   UseEffect for Template List....
 
   useEffect(() => {
-    axios
-      .get(`${baseURL}/${user.name}`, {
-        params: {
-          query: `select distinct TEMPLATE_NAME from DCR_SAMP_PROVIDER_DB.TEMPLATES.DCR_TEMPLATES where CONSUMER_NAME = '${publisherData.consumer}' and template_name NOT LIKE '%advertiser_match%';`,
-        },
-      })
-      .then((response) => {
+    const getTemplates = async () => {
+      const payload = {
+        account_name: user.name,
+        provider_database_name: user?.providerDBName,
+        user: publisherData?.consumer,
+      };
+      try {
+        const response = await API.getTemplates(payload);
         if (response?.data) {
           setTemplateNames(response?.data?.data);
         } else {
           setTemplateNames([]);
         }
-      })
-      .catch((error) => console.log(error));
-  }, [user?.name, publisherData.consumer]);
+      } catch (error) {
+        console.log(error);
+      }
+    };
+    getTemplates();
+  }, [user.name, publisherData?.consumer, user?.providerDBName]);
 
- //   UseEffect for All Columns and Allowed columns list....
+  //   UseEffect for All Columns and Allowed columns list....
 
- useEffect(() => {
-  if (publisherData.consumer !== "" && publisherData.template !== "") {
-    axios
-      .get(`${baseURL}/${user.name}`, {
-        params: {
-          query: `select ALLOWED_COLUMNS from DCR_SAMP_PROVIDER_DB.TEMPLATES.DCR_TEMPLATES where TEMPLATE_NAME = '${publisherData.template}' and CONSUMER_NAME = '${publisherData.consumer}';`,
-        },
-      })
-      .then((response) => {
-        if (response?.data?.data) {
-          let data = response?.data?.data;
-          let allowed_columns = data[0]?.ALLOWED_COLUMNS?.split("|");
-          allowed_columns = allowed_columns?.map((item) => {
-            return item?.split(".")[1];
-          });
-          setAllowedColumns(allowed_columns);
-        } else {
-          setAllowedColumns([]);
+  useEffect(() => {
+    if (publisherData.consumer !== "" && publisherData.template !== "") {
+      const getAllowedColumns = async () => {
+        const payload = {
+          account_name: user.name,
+          provider_database_name: user?.providerDBName,
+          user: publisherData?.consumer,
+          template_name: publisherData.template,
+        };
+        try {
+          const response = await API.getAllowedColumnsConsole(payload);
+          if (response?.status === 200 && response?.data?.data) {
+            let data = response?.data?.data;
+            let allowed_columns = data[0]?.ALLOWED_COLUMNS?.split("|");
+            allowed_columns = allowed_columns?.map((item) => {
+              return item?.split(".")[1];
+            });
+            setAllowedColumns(allowed_columns);
+          } else {
+            setAllowedColumns([]);
+          }
+        } catch (error) {
+          console.log(error);
         }
-      })
-      .catch((error) => console.log(error));
 
-    axios
-      .get(`${baseURL}/${user.name}`, {
-        params: {
-          query: `select ALL_COLUMNS from DCR_SAMP_PROVIDER_DB.TEMPLATES.DCR_TEMPLATES where TEMPLATE_NAME = '${publisherData.template}' and CONSUMER_NAME = '${publisherData.consumer}';`,
-        },
-      })
-      .then((response) => {
-        if (response?.data?.data) {
-          let data = response?.data?.data;
-          let all_columns = data[0]?.ALL_COLUMNS?.split(",");
-          all_columns = all_columns?.map((item) => {
-            return item;
-          });
-          setAllColumns(all_columns);
-        } else {
-          setAllColumns([]);
+        try {
+          const response = await API.getAllColumnsConsole(payload);
+          if (response?.data?.data) {
+            let data = response?.data?.data;
+            let all_columns = data[0]?.ALL_COLUMNS?.split(",");
+            all_columns = all_columns?.map((item) => {
+              return item;
+            });
+            setAllColumns(all_columns);
+          } else {
+            setAllColumns([]);
+          }
+        } catch (error) {
+          console.log(error);
         }
-      })
-      .catch((error) => console.log(error));
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [publisherData.consumer, publisherData.template]);
+      };
+      getAllowedColumns();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publisherData.consumer, publisherData.template]);
 
   useEffect(() => {
     if (
@@ -121,13 +126,16 @@ const AllowedColumns = ({ user }) => {
       publisherData.template !== "" &&
       publisherData.column_name !== ""
     ) {
-      axios
-        .get(`${baseURL}/${user.name}`, {
-          params: {
-            query: `select count(*) from DCR_SAMP_PROVIDER_DB.TEMPLATES.DCR_TEMPLATES where TEMPLATE_NAME = '${publisherData.template}' and CONSUMER_NAME = '${publisherData.consumer}' and contains(ALLOWED_COLUMNS, '${publisherData.column_name}');`,
-          },
-        })
-        .then((response) => {
+      const fetchAllowedColumnStatus = async () => {
+        const payload = {
+          account_name: user.name,
+          provider_database_name: user?.providerDBName,
+          user: publisherData?.consumer,
+          template_name: publisherData.template,
+          column_name: publisherData.column_name,
+        };
+        try {
+          const response = await API.fetchAllowedColumnStatus(payload);
           if (response?.data?.data?.length > 0) {
             let data = response?.data?.data;
             setPublisherData({
@@ -137,8 +145,11 @@ const AllowedColumns = ({ user }) => {
           } else {
             setPublisherData({ ...publisherData, status: "" });
           }
-        })
-        .catch((error) => console.log(error));
+        } catch (error) {
+          console.log(error);
+        }
+      };
+      fetchAllowedColumnStatus();
     } else {
       setPublisherData({ ...publisherData, status: "" });
     }
@@ -149,33 +160,28 @@ const AllowedColumns = ({ user }) => {
     publisherData.column_name,
   ]);
 
-  const handleClickYes = () => {
+  const handleClickYes = async () => {
     setOpenModal(!openModal);
     setLoading(true);
-    axios
-      .get(`${baseURL}/${user.name}`, {
-        params: {
-          query: `insert into DCR_SAMP_PROVIDER_DB.TEMPLATES.JSON_TABLE select PARSE_JSON('
-                  {
-                     "Consumer_Name": "${publisherData.consumer}",
-                     "Template_Name": "${publisherData.template}",
-                     "column_name" : "${publisherData.column_name}",
-                     "Tag" : "${
-                       publisherData.status === true ? "remove" : "add"
-                     }"
-                  }
-                  ');`,
-        },
-      })
-      .then((response) => {
-        if (response) {
-          callByPass();
-        }
-      })
-      .catch((error) => {
-        toast.error("Fetching error...");
-        console.log(error);
-      });
+    const payload = {
+      account_name: user.name,
+      db_name: user?.providerDBName,
+      result: JSON.stringify({
+        Consumer_Name: publisherData?.consumer,
+        Template_Name: publisherData?.template,
+        column_name: publisherData?.column_name,
+        Tag: publisherData?.status === true ? "remove" : "add",
+      }),
+    };
+    try {
+      const response = await API.updateAllowedColumns(payload);
+      if (response) {
+        callByPass();
+      }
+    } catch (error) {
+      toast.error("Fetching error...");
+      console.log(error);
+    }
   };
 
   const handleSubmit = () => {
@@ -195,28 +201,26 @@ const AllowedColumns = ({ user }) => {
     }
   };
 
-  const callByPass = () => {
-    setTimeout(() => {
-      axios
-        .get(`${baseURL}/${user.name}`, {
-          params: {
-            query: `call DCR_SAMP_PROVIDER_DB.TEMPLATES.PROC_NEW_11();`,
-          },
-        })
-        .then((response) => {
-          setLoading(false);
-          setPublisherData({
-            consumer: "",
-            template: "",
-            column_name: "",
-            status: "",
-          });
-          toast.success(response?.data?.data?.[0]?.PROC_NEW_11);
-        })
-        .catch((error) => {
-          setLoading(false);
-          console.log(error);
+  const callByPass = async () => {
+    setTimeout(async () => {
+      const payload = {
+        account_name: user.name,
+        provider_database_name: user?.providerDBName,
+      };
+      try {
+        const response = await API.procedureUpdateAllowedColumns(payload);
+        setLoading(false);
+        setPublisherData({
+          consumer: "",
+          template: "",
+          column_name: "",
+          status: "",
         });
+        toast.success(response?.data?.data?.[0]?.PROC_NEW_11);
+      } catch (error) {
+        setLoading(false);
+        console.log(error);
+      }
     }, 2000);
   };
 
@@ -318,9 +322,7 @@ const AllowedColumns = ({ user }) => {
               <option key={index} value={column}>
                 {column}
                 {"       "}
-                {allowedColumns.includes(column) 
-                ? "✓" 
-                : "✗"}
+                {allowedColumns.includes(column) ? "✓" : "✗"}
               </option>
             ))}
           </select>

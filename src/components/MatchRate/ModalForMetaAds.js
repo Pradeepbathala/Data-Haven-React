@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Box, CircularProgress, Modal } from "@mui/material";
-import axios from "axios";
 import { useSelector } from "react-redux";
+import API from "../../apiServices/api";
 
 import { handleDate } from "../../utils/commonFunctions";
 
@@ -22,8 +22,6 @@ const initialState = {
   name: "",
 };
 
-const baseURL = process.env.REACT_APP_BASE_URL;
-
 const ModalForMetaAds = ({ open, handleClose, data }) => {
   const state = useSelector((state) => state);
   const user = state && state.user;
@@ -34,7 +32,6 @@ const ModalForMetaAds = ({ open, handleClose, data }) => {
 
   const [status, setStatus] = useState("");
   const [audienceUploaded, setAudienceUploaded] = useState(false);
-  const [checkClosedStatus, setCheckClosedStatus] = useState(false);
 
   const [buttonStatus, setButtonStatus] = useState("Activate");
   const [loader, setLoader] = useState({
@@ -52,166 +49,141 @@ const ModalForMetaAds = ({ open, handleClose, data }) => {
     setCampaignData(selectedObject);
   };
 
-  // Use effect for disable page
   useEffect(() => {
-    if (checkClosedStatus) {
-      document.body.classList.add("overlay");
-    } else {
-      document.body.classList.remove("overlay");
-    }
-  }, [checkClosedStatus]);
-
-  useEffect(() => {
-    axios
-      .get(`${baseURL}/fetching_campaign`, {
-        params: {
-          account_name: user?.Consumer,
-        },
-      })
-      .then((response) => {
-        if (response?.data?.data) {
+    const fetch_campaigns = async () => {
+      const payload = {
+        account_name: user?.Consumer,
+        run_id: data?.runId,
+      };
+      try {
+        const response = await API.fetch_campaigns(payload);
+        if (response.status === 200 && response?.data?.data) {
           let fetchResult = response?.data?.data;
           setCampaignList(fetchResult);
 
-          axios
-            .get(`${baseURL}/display_adlog`, {
-              params: {
-                account_name: user?.Consumer,
-                run_id: data?.runId,
-              },
-            })
-            .then((response) => {
-              if (response?.data?.data && response?.data?.data?.length > 0) {
-                let result = response?.data?.data[0];
-                setStatus(
-                  `${result.STATUS} at ${handleDate(
-                    result?.UPLOAD_TS ||
-                      result?.ACTIVATED_TS ||
-                      result?.DEACTIVATED_TS
-                  )}`
-                );
-                setButtonStatus(
-                  result?.ACTIVATED_TS === null ? "Activate" : "De-activate"
-                );
-                setAudienceUploaded(
-                  result?.UPLOAD_TS === null ||
-                    result?.ACTIVATED_TS === null ||
-                    result?.DEACTIVATED_TS === null
-                );
-                let selectedObject = initialState;
-                selectedObject = fetchResult?.find(
-                  (item) => item?.id === result?.CAMPAIGN_ID
-                );
+          try {
+            const response = await API.display_logs(payload);
+            if (
+              response.status === 200 &&
+              response?.data?.data &&
+              response?.data?.data?.length > 0
+            ) {
+              let result = response?.data?.data[0];
+              setStatus(
+                `${result.STATUS} at ${handleDate(
+                  result?.UPLOAD_TS ||
+                    result?.ACTIVATED_TS ||
+                    result?.DEACTIVATED_TS
+                )}`
+              );
+              setButtonStatus(
+                result?.ACTIVATED_TS === null ? "Activate" : "De-activate"
+              );
+              setAudienceUploaded(
+                result?.UPLOAD_TS === null ||
+                  result?.ACTIVATED_TS === null ||
+                  result?.DEACTIVATED_TS === null
+              );
+              let selectedObject = initialState;
+              selectedObject = fetchResult?.find(
+                (item) => item?.id === result?.CAMPAIGN_ID
+              );
 
-                setCampaignData(selectedObject);
-              }
-            })
-            .catch((error) => console.log(error));
+              setCampaignData(selectedObject);
+            }
+          } catch (error) {
+            console.error("Error fetching data:", error);
+          }
         }
-      })
-      .catch((error) => console.log(error));
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    };
+    fetch_campaigns();
   }, [user?.Consumer, data?.runId]);
 
-  const handleUploadAudience = () => {
-    const url =
-      "https://adsmanager.facebook.com/adsmanager/manage/adsets/edit?act=797211008551568&business_id=931243647962059&filter_set=CAMPAIGN_GROUP_SELECTED-STRING_SET%1EIN%1E[%2223860594356580003%22]&selected_campaign_ids=23860594356580003&selected_adset_ids=23860594362260003&breakdown_regrouping=true"; // Replace with the URL you want to open
-
-    const windowName = "popupWindow";
-    const windowFeatures =
-      "width=" + window.innerWidth + ",height=" + window.innerHeight;
-    // Open the URL in a new pop-up window
-    const newWin = window.open(url, windowName, windowFeatures);
-    setCheckClosedStatus(true);
-
-    const statusCheck = setInterval(() => {
-      if (newWin && newWin.closed) {
-        clearInterval(statusCheck);
-        setCheckClosedStatus(false);
-      }
-    }, 1000);
-
+  const handleUploadAudience = async () => {
     setLoader({ ...loader, audienceLoader: true });
-    axios
-      .get(`${baseURL}/fetch_sf_ads_data`, {
-        params: {
-          account_name: user?.Consumer,
-          run_id: data?.runId,
-          templateName: data?.template_name,
-          campaign_id: campaignData?.id,
-          consumer_database_name: "DCR_SAMP_CONSUMER1",
-        },
-      })
-      .then((response) => {
-        if (response?.data?.data) {
-          let result = response?.data?.data[0];
-          setStatus(`${result.STATUS} at ${handleDate(result?.UPLOAD_TS)}`);
-          setLoader({ ...loader, audienceLoader: false });
-          setAudienceUploaded(true);
-        } else {
-          setLoader({ ...loader, audienceLoader: false });
-        }
-      })
-      .catch((error) => {
+    const payload = {
+      account_name: user?.Consumer,
+      run_id: data?.runId,
+      templateName: data?.template_name,
+      campaign_id: campaignData?.id,
+      consumer_database_name: "DCR_SAMP_CONSUMER1",
+    };
+    try {
+      const response = await API.uploadAudience(payload);
+      if (
+        response.status === 200 &&
+        response?.data?.data &&
+        response?.data?.data?.length > 0
+      ) {
+        let result = response?.data?.data[0];
+        setStatus(`${result.STATUS} at ${handleDate(result?.UPLOAD_TS)}`);
         setLoader({ ...loader, audienceLoader: false });
-
-        console.log(error);
-      });
+        setAudienceUploaded(true);
+      } else {
+        setLoader({ ...loader, audienceLoader: false });
+      }
+    } catch (error) {
+      setLoader({ ...loader, audienceLoader: false });
+      console.error("Error fetching data:", error);
+    }
   };
 
-  const handleActivate = (status) => {
+  const handleActivate = async (status) => {
+    const payload = {
+      account_name: user?.Consumer,
+      run_id: data?.runId,
+      campaign_id: campaignData?.id,
+    };
     if (status === "Activate") {
       setLoader({ ...loader, activateLoader: true });
-
-      axios
-        .get(`${baseURL}/publishads_meta`, {
-          params: {
-            account_name: user?.Consumer,
-            run_id: data?.runId,
-            campaign_id: campaignData?.id,
-          },
-        })
-        .then((response) => {
-          if (response?.data?.data) {
-            let result = response?.data?.data[0];
-            setStatus(
-              `${result.STATUS} at ${handleDate(result?.ACTIVATED_TS)}`
-            );
-            setButtonStatus("De-activate");
-            setLoader({ ...loader, activateLoader: false });
+      try {
+        const response = await API.publishMetaAds(payload);
+        if (
+          response.status === 200 &&
+          response?.data?.data &&
+          response?.data?.data?.length > 0
+        ) {
+          let result = response?.data?.data[0];
+          setStatus(`${result.STATUS} at ${handleDate(result?.ACTIVATED_TS)}`);
+          if (result.STATUS === "PAUSED") {
+            setButtonStatus("Activate");
           } else {
-            setLoader({ ...loader, activateLoader: false });
+            setButtonStatus("De-activate");
           }
-        })
-        .catch(() => {
           setLoader({ ...loader, activateLoader: false });
-        });
+        } else {
+          setLoader({ ...loader, activateLoader: false });
+        }
+      } catch (error) {
+        setLoader({ ...loader, audienceLoader: false });
+        console.error("Error fetching data:", error);
+      }
     } else {
       setLoader({ ...loader, activateLoader: true });
-      axios
-        .get(`${baseURL}/stoppingads_meta`, {
-          params: {
-            account_name: user?.Consumer,
-            run_id: data?.runId,
-            campaign_id: campaignData?.id,
-          },
-        })
-        .then((response) => {
-          if (response?.data?.data) {
-            let result = response?.data?.data[0];
-            setLoader({ ...loader, activateLoader: false });
-            setButtonStatus("Activate");
-            setStatus(
-              `${result.STATUS} at ${handleDate(result?.DEACTIVATED_TS)}`
-            );
-          } else {
-            setLoader({ ...loader, activateLoader: false });
-          }
-        })
-        .catch(() => {
+
+      try {
+        const response = await API.stopMetaAds(payload);
+        if (
+          response.status === 200 &&
+          response?.data?.data &&
+          response?.data?.data?.length > 0
+        ) {
+          let result = response?.data?.data[0];
           setLoader({ ...loader, activateLoader: false });
-        });
+          setButtonStatus("Activate");
+          setStatus(
+            `${result.STATUS} at ${handleDate(result?.DEACTIVATED_TS)}`
+          );
+        } else {
+          setLoader({ ...loader, activateLoader: false });
+        }
+      } catch (error) {
+        setLoader({ ...loader, audienceLoader: false });
+        console.error("Error fetching data:", error);
+      }
     }
   };
 

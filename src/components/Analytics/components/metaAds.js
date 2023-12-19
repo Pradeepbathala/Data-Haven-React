@@ -1,13 +1,11 @@
 import React from "react";
 import { useEffect } from "react";
-import axios from "axios";
 import { useSelector } from "react-redux";
 import { useState } from "react";
 import { Box, Modal } from "@mui/material";
 import CustomTable from "../../CommonComponent/Table";
 import { handleDate } from "../../../utils/commonFunctions";
-
-const baseURL = process.env.REACT_APP_BASE_URL;
+import API from "../../../apiServices/api";
 
 // Modal style
 const resultstyle = {
@@ -43,14 +41,13 @@ const MetaAdsAnalytics = ({ runId }) => {
   };
 
   useEffect(() => {
-    axios
-      .get(`${baseURL}/analysis_report`, {
-        params: {
-          account_name: user?.Consumer,
-          run_id: runId,
-        },
-      })
-      .then((response) => {
+    const payload = {
+      account_name: user?.Consumer,
+      run_id: runId,
+    };
+    const getAnalyticsReport = async () => {
+      try {
+        let response = await API.getAnalyticsReport(payload);
         if (
           response?.status === 200 &&
           response?.data?.data &&
@@ -64,47 +61,48 @@ const MetaAdsAnalytics = ({ runId }) => {
         } else {
           setNoDataFound(true);
         }
-      })
-      .catch((error) => console.log(error));
+      } catch (error) {
+        console.log("error", error);
+      }
+    };
+    getAnalyticsReport();
   }, [runId, user?.Consumer]);
 
-  const handleLogs = () => {
+  const handleLogs = async () => {
     setViewLogs({
       ...viewLogs,
       openModal: true,
       status: metaAdsAnalysisData?.STATUS,
     });
-
-    axios
-      .get(`${baseURL}/analysis_log_report`, {
-        params: {
-          account_name: user?.Consumer,
-          run_id: runId,
-        },
-      })
-      .then((response) => {
-        if (
-          response?.status === 200 &&
-          response?.data?.data &&
-          response?.data?.data?.length > 0
-        ) {
-          let fetchResult = response?.data?.data;
-          setTableHead(["Start Date", "End Date"]);
-          let row = [];
-          if (fetchResult?.length > 0) {
-            let head = fetchResult && Object.keys(fetchResult[0]);
-            fetchResult?.map((obj) => {
-              return row.push(
-                head?.map((key) =>
-                  obj[key] !== null ? handleDate(obj[key]) : "NA"
-                )
-              );
-            });
-          }
-          setTableRows(row);
+    const payload = {
+      account_name: user?.Consumer,
+      run_id: runId,
+    };
+    try {
+      let response = await API.getAnalyticsLogsReport(payload);
+      if (
+        response?.status === 200 &&
+        response?.data?.data &&
+        response?.data?.data?.length > 0
+      ) {
+        let fetchResult = response?.data?.data;
+        setTableHead(["Start Date", "End Date"]);
+        let row = [];
+        if (fetchResult?.length > 0) {
+          let head = fetchResult && Object.keys(fetchResult[0]);
+          fetchResult?.map((obj) => {
+            return row.push(
+              head?.map((key) =>
+                obj[key] !== null ? handleDate(obj[key]) : "NA"
+              )
+            );
+          });
         }
-      })
-      .catch((error) => console.log(error));
+        setTableRows(row);
+      }
+    } catch (error) {
+      console.log("error", error);
+    }
   };
 
   return (

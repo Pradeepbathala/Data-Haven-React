@@ -3,35 +3,46 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { CircularProgress } from "@mui/material";
+import { Alert, CircularProgress } from "@mui/material";
+import md5 from "md5";
+
 import HTWLogo from "../../Assets/Logos/Data_Haven_Logo.svg";
+import API from "../../apiServices/api";
 
 import * as actions from "../../redux/actions/index";
-
-const baseURL = process.env.REACT_APP_BASE_URL;
+const reactAppAuthURL = process.env.REACT_APP_BASE_URL_AUTH;
+const reactAppAuthAccessToken = process.env.REACT_APP_AUTH_ACCESS_TOKEN;
 
 const Login = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+
   const [loginDetails, setLoginDetails] = useState({
     userName: "",
     password: "",
-    captcha: "",
   });
 
   const [errors, setErrors] = useState({
     userName: null,
     password: null,
-    captcha: null,
+    message: "",
   });
+  const [loginError, setLoginError] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Show toaster when Access token has expired..
+  const loginErrorMessage = localStorage.getItem("loginErrorMessage");
+
+  if (loginErrorMessage) {
+    toast.error(loginErrorMessage);
+    localStorage.removeItem("loginErrorMessage");
+  }
 
   const handleOnChange = (e) => {
     const inputName = e.target.name;
     const inputValue = e.target.value;
-
+    setLoginError("");
     if (inputName === "userName") {
       if (inputValue === "") {
         setErrors({ ...errors, userName: "Please enter User Name" });
@@ -48,32 +59,135 @@ const Login = () => {
     setLoginDetails({ ...loginDetails, [inputName]: inputValue });
   };
 
-  const getAllConsumers = async (userRole) => {
-    await axios
-      .get(`${baseURL}/${loginDetails?.userName}`, {
-        params: {
-          query: `select user from CONSUMER_ATTRIBUTES_VW where admin = 'TRUE';`,
-        },
-      })
-      .then((response) => {
-        if (response?.data?.data) {
-          setIsSubmitted(true);
+  const getAllConsumers = async (userRole, partyAccount) => {
+    const payload = {
+      account_name: loginDetails?.userName,
+      user: loginDetails?.userName,
+      // provider_database_name: user?.
+    };
+    try {
+      const response = await API.getAdminPartyAccountApi(payload);
+      if (response?.status === 200 && response?.data?.data) {
+        let data_consumer = response?.data?.data?.[0];
 
-          let data = response?.data?.data?.[0];
-          dispatch(
-            actions.loginRequest({
-              isLoggedIn: true,
-              name: loginDetails?.userName,
-              role: userRole,
-              Consumer: data?.USER,
-            })
+        const payload = {
+          account_name: data_consumer?.USER,
+          user: loginDetails?.userName,
+          password: md5(loginDetails?.password),
+        };
+        // to check user is blocked or not...
+        try {
+          const response = await API.checkBlockedUser(payload);
+          if (
+            response?.status === 200 &&
+            response?.data?.data &&
+            response?.data?.data?.toUpperCase() === "TRUE"
+          ) {
+            try {
+              const response = await API.getAuthorisationApi(payload);
+              if (response?.status === 200 && response?.data?.data) {
+                if (parseInt(response?.data?.data[0]?.COUNT) === 1) {
+                  const payload = {
+                    account_name: loginDetails?.userName,
+                    user: loginDetails?.userName,
+                  };
+                  try {
+                    const response = await API.getAuthorisedUserDetailsApi(
+                      payload
+                    );
+                    if (response?.status === 200 && response?.data?.data) {
+                      let data = response?.data?.data; // Find user login info]
+                      if (data?.length > 0) {
+                        const userData = data && data[0];
+
+                        const userRole = [];
+                        if (userData?.PUBLISHER?.toLowerCase() === "true") {
+                          userRole.push("Publisher");
+                        }
+                        if (userData?.PROVIDER?.toLowerCase() === "true") {
+                          userRole.push("Provider");
+                        }
+                        if (userData?.CONSUMER?.toLowerCase() === "true") {
+                          userRole.push("Consumer");
+                        }
+                        if (
+                          userData?.PROVIDER?.toLowerCase() === "true" &&
+                          userData?.ADMIN?.toLowerCase() === "true"
+                        ) {
+                          userRole.push("Provider_Admin");
+                        }
+
+                        if (
+                          userData?.CONSUMER?.toLowerCase() === "true" &&
+                          userData?.ADMIN?.toLowerCase() === "true"
+                        ) {
+                          userRole.push("Consumer_Admin");
+                        }
+                        dispatch(
+                          actions.loginRequest({
+                            isLoggedIn: true,
+                            name: loginDetails?.userName,
+                            role: userRole,
+                            ConsumerPartyAccount: userData?.PARTY_ACCOUNT,
+                            Consumer: data_consumer?.USER,
+                            consumerDBName: `DCR_SAMP_CONSUMER1`,
+                            providerDBName: `DCR_SAMP_PROVIDER_DB`,
+                          })
+                        );
+                        navigate("/home");
+                      } else {
+                        // Username not found
+                        setLoading(false);
+                        setLoginError("Invalid Credentials");
+                        toast.error(
+                          "You entered an incorrect username, password or both."
+                        );
+                      }
+                    } else {
+                      setLoginError("Invalid Credentials");
+                      setLoading(false);
+                    }
+                  } catch (error) {
+                    setLoginError("Invalid Credentials");
+                    setLoading(false);
+                  }
+                } else {
+                  setLoginError(response?.data?.data);
+                  setLoading(false);
+                }
+              } else {
+                setLoginError("Invalid Credentials");
+                setLoading(false);
+              }
+            } catch (error) {
+              setLoginError(
+                "We are facing some issue in Login. Please try again after sometime"
+              );
+              setLoading(false);
+            }
+          } else if (response?.status === 200 && response?.data?.data) {
+            setLoginError(response?.data?.data);
+            setLoading(false);
+          } else {
+            setLoginError(
+              "We are facing some issue in Login. Please try again after sometime"
+            );
+            setLoading(false);
+          }
+        } catch (error) {
+          setLoginError(
+            "We are facing some issue in Login. Please try again after sometime"
           );
-          navigate("/home");
+          setLoading(false);
         }
-      })
-      .catch((error) => {
-        console.log(error);
-      });
+      } else {
+        setLoading(false);
+        setLoginError("We are facing issue. Please try again after sometime!!");
+      }
+    } catch (error) {
+      setLoading(false);
+      setLoginError("We are facing issue. Please try again after sometime!!");
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -87,63 +201,31 @@ const Login = () => {
       return;
     }
 
-    if (loginDetails?.userName !== "") {
+    if (loginDetails?.userName !== "" || loginDetails?.password !== "") {
       setLoading(true);
-      await axios
-        .get(`${baseURL}/${loginDetails?.userName}`, {
-          params: {
-            query: `select * from CONSUMER_ATTRIBUTES_VW WHERE USER = '${loginDetails?.userName}';`,
-          },
-        })
-        .then((response) => {
-          if (response?.data?.data) {
-            let data = response?.data?.data; // Find user login info
+      // get Access token...
+      axios
+        .get(
+          `${reactAppAuthURL}/fetch_access_token?user=${loginDetails?.userName}`,
+          {
+            headers: {
+              Authorization: `Bearer ${md5(reactAppAuthAccessToken)}`,
+            },
+          }
+        )
+        .then(async (response) => {
+          if (response?.status === 200 && response?.data) {
+            localStorage.setItem("access_token", response?.data?.access_token);
+            localStorage.setItem("session_id", response?.data?.session_id);
+            localStorage.setItem("token_expiry", response?.data?.token_expiry);
 
-            const userData = data ? data[0] : [];
-
-            // Compare user info
-            if (userData) {
-              if (userData.PASSWORD !== loginDetails?.password) {
-                setErrors({ ...errors, password: "Invalid Password" });
-                setLoading(false);
-              } else {
-                const userRole = [];
-                if (userData?.PUBLISHER?.toLowerCase() === "true") {
-                  userRole.push("Publisher");
-                }
-                if (userData?.PROVIDER?.toLowerCase() === "true") {
-                  userRole.push("Provider");
-                }
-                if (userData?.CONSUMER?.toLowerCase() === "true") {
-                  userRole.push("Consumer");
-                }
-                if (
-                  userData?.PROVIDER?.toLowerCase() === "true" &&
-                  userData?.ADMIN?.toLowerCase() === "true"
-                ) {
-                  userRole.push("Provider_Admin");
-                }
-
-                if (
-                  userData?.PROVIDER?.toLowerCase() !== "true" &&
-                  userData?.ADMIN?.toLowerCase() === "true"
-                ) {
-                  userRole.push("Consumer_Admin");
-                }
-                getAllConsumers(userRole);
-              }
-            } else {
-              // Username not found
-              setLoading(false);
-              setErrors({ ...errors, userName: "User name not found" });
-              toast.error(
-                "You entered an incorrect username, password or both."
-              );
-            }
+            getAllConsumers();
           }
         })
         .catch((error) => {
-          setErrors({ ...errors, userName: "User name not found" });
+          setLoginError(
+            "We are facing some issue while connecting to server. Please try again after sometime"
+          );
           setLoading(false);
           console.log(error);
         });
@@ -215,10 +297,18 @@ const Login = () => {
       <div className="my-2">
         <span
           className="text-sm font-medium leading-6 text-amaranth-600 cursor-pointer"
-          onClick={() => navigate('/forgot-password')}
+          onClick={() => navigate("/forgot-password")}
         >
           Forgot password?
         </span>
+      </div>
+      {/* for showing error */}
+      <div className="my-4">
+        {loginError !== "" && (
+          <Alert className="text-red-600" severity="error">
+            {loginError}
+          </Alert>
+        )}
       </div>
     </div>
   );
@@ -252,11 +342,7 @@ const Login = () => {
           </div>
 
           <div className="flex items-start justify-center my-auto">
-            {isSubmitted ? (
-              <div>User is successfully logged in</div>
-            ) : (
-              renderForm
-            )}
+            {renderForm}
           </div>
         </div>
       </div>

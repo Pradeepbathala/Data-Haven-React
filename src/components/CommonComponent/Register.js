@@ -38,7 +38,6 @@ const Register = () => {
 
   const [formValidated, setFormValidated] = useState(false);
 
-  const [isSubmitted, setIsSubmitted] = useState(false);
   const [note, setNote] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
 
@@ -192,6 +191,30 @@ const Register = () => {
 
   const sendEmail = () => {
     setEmailLoading(true);
+    //DONE...
+    /*
+    const payload ={
+      const payload = {
+      mailusedfor: "Forgot",
+      recipient: data?.EMAIL,
+      user_name: data?.USER,
+      password: data?.PASSWORD,
+      email_id: data?.EMAIL,
+    };
+    try {
+      const response = await API.mailtoadmin(payload);
+      if (response.status ===200) {
+          setNote(
+            "** Our Expert team will connect with you within next 24 hours for the further process. **"
+          );
+          setEmailLoading(false);
+        } else {
+          setNote("");
+          setEmailLoading(false);
+        }
+    }
+    catch (error){console.log(error);}
+    */
     axios
       .get(`${baseURL}/mailtoadmin`, {
         params: {
@@ -227,6 +250,19 @@ const Register = () => {
   };
 
   const registerUser = () => {
+  //PENDING..
+    /*
+    const payload ={};
+    try {
+      const response = await API.DEMO(payload);
+      if (response.status === 200) {
+          sendEmail();
+        } else {
+          setNote("Please, try Again to register.");
+        }
+    }
+    catch (error){console.log(error);}
+    */
     axios
       .get(`${baseURL}/Provider`, {
         params: {
@@ -577,11 +613,7 @@ const Register = () => {
             </div>
 
             <div className="flex items-start justify-center my-auto">
-              {isSubmitted ? (
-                <div>User is successfully logged in</div>
-              ) : (
-                renderForm
-              )}
+              {renderForm}
             </div>
           </div>
           <div className="w-1/2 h-full flex flex-col items-center justify-center overflow-hidden relative bg-gradient-to-br from-amaranth-100 to-purple-200 rounded-r-3xl px-6">

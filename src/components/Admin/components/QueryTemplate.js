@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
 import { toast } from "react-toastify";
 import { CircularProgress } from "@mui/material";
+import API from "../../../apiServices/api";
 
 import CommonModal from "../../CommonComponent/Modal";
-
-const baseURL = process.env.REACT_APP_BASE_URL;
 
 const QueryTemplate = ({ user }) => {
   const [queryData, setQueryData] = useState({
@@ -26,50 +24,60 @@ const QueryTemplate = ({ user }) => {
   };
 
   useEffect(() => {
-    axios
-      .get(`${baseURL}/${user?.name}`, {
-        params: {
-          query:
-            "select distinct CONSUMER_NAME from DCR_SAMP_PROVIDER_DB.TEMPLATES.DCR_TEMPLATES;",
-        },
-      })
-      .then((response) => {
-        if (response?.data) {
+    const getConsumerName = async () => {
+      const payload = {
+        account_name: user.name,
+        provider_database_name: user?.providerDBName,
+      };
+      try {
+        const response = await API.getConsumerName(payload);
+        if (response.status === 200 && response?.data?.data) {
           setConsumers(response?.data?.data);
         } else {
           setConsumers([]);
         }
-      })
-      .catch((error) => console.log(error));
-  }, [user?.name]);
+      } catch (error) {
+        console.log(error);
+      }
+    };
+    getConsumerName();
+  }, [user]);
 
   useEffect(() => {
-    axios
-      .get(`${baseURL}/${user?.name}`, {
-        params: {
-          query: `select distinct TEMPLATE_NAME, TEMPLATE_STATUS from DCR_SAMP_PROVIDER_DB.TEMPLATES.DCR_TEMPLATES where CONSUMER_NAME = '${queryData.consumer}';`,
-        },
-      })
-      .then((response) => {
-        if (response?.data) {
-          setTemplateNames(response?.data?.data);
-        } else {
-          setTemplateNames([]);
+    if (queryData?.consumer !== "") {
+      const getTemplates = async () => {
+        const payload = {
+          account_name: user.name,
+          provider_database_name: user?.providerDBName,
+          user: queryData?.consumer,
+        };
+        try {
+          const response = await API.getTemplates(payload);
+          if (response.status === 200 && response?.data?.data) {
+            setTemplateNames(response?.data?.data);
+          } else {
+            setTemplateNames([]);
+          }
+        } catch (error) {
+          console.log(error);
         }
-      })
-      .catch((error) => console.log(error));
-  }, [user?.name, queryData.consumer]);
+      };
+      getTemplates();
+    }
+  }, [user, queryData.consumer]);
 
   useEffect(() => {
     if (queryData.consumer !== "" && queryData.template !== "") {
-      axios
-        .get(`${baseURL}/${user?.name}`, {
-          params: {
-            query: `select TEMPLATE_STATUS from DCR_SAMP_PROVIDER_DB.TEMPLATES.DCR_TEMPLATES where CONSUMER_NAME = '${queryData.consumer}' AND TEMPLATE_NAME = '${queryData.template}';`,
-          },
-        })
-        .then((response) => {
-          if (response?.data?.data?.length > 0) {
+      const fetchTemplateStatus = async () => {
+        const payload = {
+          account_name: user.name,
+          provider_database_name: user?.providerDBName,
+          user: queryData?.consumer,
+          template_name: queryData?.template,
+        };
+        try {
+          const response = await API.fetchTemplateStatus(payload);
+          if (response.status === 200 && response?.data?.data?.length > 0) {
             setQueryData({
               ...queryData,
               status: response?.data?.data[0]?.TEMPLATE_STATUS,
@@ -77,37 +85,39 @@ const QueryTemplate = ({ user }) => {
           } else {
             setQueryData({ ...queryData, status: "" });
           }
-        })
-        .catch((error) => console.log(error));
+        } catch (error) {
+          console.log(error);
+        }
+      };
+      fetchTemplateStatus();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryData.consumer, queryData.template]);
 
-  const handleClickYes = () => {
+  const handleClickYes = async () => {
     setOpenModal(!openModal);
     setLoading(true);
-    axios
-      .get(`${baseURL}/${user?.name}`, {
-        params: {
-          query: `insert into DCR_SAMP_PROVIDER_DB.TEMPLATES.JSON_TABLE select PARSE_JSON('
-                  {
-                     "Consumer_Name": "${queryData.consumer}",
-                     "Template_Name": "${queryData.template}",
-                     "Template_Status" : ${queryData.status === true ? "false" : "true"
-            }
-                  }
-                  ');`,
-        },
-      })
-      .then((response) => {
-        if (response) {
-          callByPass();
-        }
-      })
-      .catch((error) => {
-        toast.error("Fetching error...");
-        console.log(error);
-      });
+    const payload = {
+      account_name: user.name,
+      provider_database_name: user?.providerDBName,
+      user: queryData?.consumer,
+      template_name: queryData?.template,
+      status: queryData?.status === true ? "FALSE" : "TRUE",
+    };
+    try {
+      const response = await API.updateTemplates(payload);
+      if (response.status === 200) {
+        setLoading(false);
+        setQueryData({ consumer: "", template: "", status: "" });
+        toast.success(response?.data?.data?.[0]?.UPDATETEMPLATESTATUS);
+      } else {
+        setLoading(false);
+      }
+    } catch (error) {
+      toast.error("Fetching error...");
+      console.log(error);
+      setLoading(false);
+    }
   };
 
   const handleSubmit = () => {
@@ -115,31 +125,12 @@ const QueryTemplate = ({ user }) => {
       return;
     } else {
       setMessage(
-        `Are you sure, you want to ${queryData.status === true ? "Disable" : "Enable"
+        `Are you sure, you want to ${
+          queryData.status === true ? "Disable" : "Enable"
         } this template?`
       );
       setOpenModal(!openModal);
     }
-  };
-
-  const callByPass = () => {
-    setTimeout(() => {
-      axios
-        .get(`${baseURL}/${user?.name}`, {
-          params: {
-            query: `CALL DCR_SAMP_PROVIDER_DB.TEMPLATES.UPDATETEMPLATESTATUS();`,
-          },
-        })
-        .then((response) => {
-          setLoading(false);
-          setQueryData({ consumer: "", template: "", status: "" });
-          toast.success(response?.data?.data?.[0]?.UPDATETEMPLATESTATUS);
-        })
-        .catch((error) => {
-          setLoading(false);
-          console.log(error);
-        });
-    }, 2000);
   };
 
   return (
@@ -210,10 +201,7 @@ const QueryTemplate = ({ user }) => {
               <option key={index} value={template?.TEMPLATE_NAME}>
                 {template?.TEMPLATE_NAME}
                 {"       "}
-                {template?.TEMPLATE_STATUS === true
-                  ? " ✓"
-                  : "✗"
-                }
+                {template?.TEMPLATE_STATUS === true ? " ✓" : "✗"}
               </option>
             ))}
           </select>
@@ -234,8 +222,9 @@ const QueryTemplate = ({ user }) => {
                   }}
                 />
               ) : (
-                <span className="ml-2">{`${queryData.status === true ? "Disable" : "Enable"
-                  }`}</span>
+                <span className="ml-2">{`${
+                  queryData.status === true ? "Disable" : "Enable"
+                }`}</span>
               )}
             </button>
           </div>

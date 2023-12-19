@@ -28,6 +28,19 @@ const Home = () => {
 
   const sendEmail = () => {
     setEmailLoading(true);
+    //pending...
+    /*const payload ={};
+      try{
+        if (response) {
+          setNote("** Our Expert team will connect with you, very soon. **");
+          setEmailLoading(false);
+        } else {
+          setNote("");
+          setEmailLoading(false);
+        }
+      }
+      catch (error){console.log(error);}
+    */
     axios
       .get(`${baseURL}/mailtoadmin`, {
         params: {

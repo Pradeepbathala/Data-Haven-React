@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import axios from "axios";
 import { toast } from "react-toastify";
 import { Box, CircularProgress, Modal } from "@mui/material";
 import { useDispatch, useSelector } from "react-redux";
@@ -8,6 +7,7 @@ import SelectDropdown from "./CommonComponent/SelectDropdown";
 import * as actions from "../redux/actions/index";
 import enrichment from "../Assets/Personal data _Monochromatic.svg";
 import CommonModal from "./CommonComponent/Modal";
+import API from "../apiServices/api";
 
 import { Steps } from "intro.js-react";
 import "intro.js/introjs.css";
@@ -24,8 +24,6 @@ import Table from "./CommonComponent/Table";
 
 import "./styles.css";
 import "./pure-react.css";
-
-const baseURL = process.env.REACT_APP_BASE_URL;
 
 // Modal style
 const resultstyle = {
@@ -78,7 +76,6 @@ const Enrichment = () => {
   const [tableHead, setTableHead] = useState([]);
   const [tableRows, setTableRows] = useState([]);
 
-  const [callTable, setCallTable] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error1, setError1] = useState("");
   const [requestFailedReason, setRequestFailedReason] = React.useState({
@@ -120,88 +117,77 @@ const Enrichment = () => {
   // UseEffect used for Calling API for the table if request...
 
   useEffect(() => {
-    axios
-      .get(`${baseURL}/${user?.name}`, {
-        params: {
-          query:
-            "select * from DCR_SAMP_CONSUMER1.PUBLIC.DASHBOARD_TABLE where TEMPLATE_NAME = 'CUSTOMER ENRICHMENT' order by RUN_ID desc limit 5;",
-        },
-      })
-      .then((response) => {
-        if (response?.data?.data) {
-          let res = response?.data?.data;
-          setData(res);
-        } else {
-          setData([]);
-        }
-      })
-      .catch((error) => console.log(error));
-  }, [user?.name, callTable]);
-
-  const getStatusApi = () => {
-    axios
-      .get(`${baseURL}/${user?.name}`, {
-        params: {
-          query:
-            "select * from DCR_SAMP_CONSUMER1.PUBLIC.DASHBOARD_TABLE where TEMPLATE_NAME = 'CUSTOMER ENRICHMENT' order by RUN_ID desc limit 5;",
-        },
-      })
-      .then((response) => {
-        if (response?.data?.data) {
-          let res = response?.data?.data;
-          setData(res);
-        } else {
-          setData([]);
-        }
-      })
-      .catch((error) => console.log(error));
-  };
-
-  useEffect(() => {
     let intervalId;
     if (byPassAPICalled === true) {
       intervalId = setInterval(() => {
-        getStatusApi();
+        fetchMainTable();
       }, 5000);
     }
     return () => {
       clearInterval(intervalId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.name, byPassAPICalled, callTable]);
-
-  // UseEffect used for Inserting the Provider...
+  }, [byPassAPICalled]);
 
   useEffect(() => {
-    axios
-      .get(`${baseURL}/${user?.name}`, {
-        params: {
-          query: "select provider from DCR_SAMP_CONSUMER1.PUBLIC.PROV_DETAILS;",
-        },
-      })
-      .then((response) => {
-        if (response?.data?.data) {
+    fetchMainTable();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fetchMainTable = async () => {
+    const payload = {
+      account_name: user?.name,
+      db_name: user?.consumerDBName,
+      template_name: "CUSTOMER ENRICHMENT",
+    };
+    try {
+      const response = await API.fetchData(payload);
+      if (response.status === 200 && response?.data?.data) {
+        let res = response?.data?.data;
+        setData(res);
+      } else {
+        setData([]);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  // UseEffect used for Inserting the Provider...
+  useEffect(() => {
+    const getAllProviders = async () => {
+      const payload = {
+        account_name: user?.Consumer,
+        db_name: user?.consumerDBName,
+      };
+      try {
+        const response = await API.getAllProvidersList(payload);
+        if (response.status === 200 && response?.data?.data) {
           let provider_name = response?.data?.data?.[0];
           setFormData({ ...formData, Provider_Name: provider_name.PROVIDER });
           getDatabaseName(provider_name.PROVIDER);
         }
-      })
-      .catch((error) => console.log(error));
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    };
+    getAllProviders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.name]);
+  }, [user]);
 
   // UseEffect to call API for get the Columns list
 
   useEffect(() => {
     if (databaseName !== "" && formData["Query_Name"] !== "") {
-      axios
-        .get(`${baseURL}/${user?.name}`, {
-          params: {
-            query: `select allowed_columns from ${databaseName}.CLEANROOM.TEMPLATES where template_name='${formData["Query_Name"]}';`,
-          },
-        })
-        .then((response) => {
-          if (response?.data) {
+      const getAllowedColumns = async () => {
+        const payload = {
+          account_name: user?.Consumer,
+          databaseName: databaseName,
+          Query_Name: formData["Query_Name"],
+        };
+        try {
+          const response = await API.getAllowedColumns(payload);
+          if (response.status === 200 && response?.data?.data) {
             let col_name = response?.data?.data[0]?.ALLOWED_COLUMNS?.split("|");
             col_name = col_name?.map((item) => {
               return item?.split(".")[1];
@@ -216,64 +202,77 @@ const Enrichment = () => {
             });
             finalArr.push(...temp);
             setColumns(finalArr);
+          } else {
+            setColumns([]);
+            setFormData({
+              ...formData,
+              Column_Names: [],
+            });
           }
-        })
-        .catch((error) => console.log(error));
+        } catch (error) {
+          console.error("Error fetching data:", error);
+        }
+      };
+      getAllowedColumns();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [databaseName, formData["Query_Name"]]);
+  }, [databaseName, formData["Query_Name"], user?.Consumer]);
 
   /// Get database name for other API's..
 
-  const getDatabaseName = (selectedProvider) => {
-    axios
-      .get(`${baseURL}/${user?.name}`, {
-        params: {
-          query: `select database from DCR_SAMP_CONSUMER1.PUBLIC.PROV_DETAILS where provider = '${selectedProvider}';`,
-        },
-      })
-      .then((response) => {
-        if (response?.data) {
-          let db_name = response?.data?.data;
-          setDatabaseName(db_name[0]?.DATABASE);
-        } else {
-          setDatabaseName("");
-        }
-      })
-      .catch((error) => console.log(error));
+  const getDatabaseName = async (selectedProvider) => {
+    const payload = {
+      account_name: user?.Consumer,
+      selectedProvider: selectedProvider,
+      consumer_database_name: user?.consumerDBName,
+    };
+    try {
+      const response = await API.getDatabaseName(payload);
+      if (response.status === 200 && response?.data?.data) {
+        let db_name = response?.data?.data;
+        setDatabaseName(db_name[0]?.DATABASE);
+      } else {
+        setDatabaseName("");
+      }
+    } catch (error) {
+      console.log(error);
+    }
   };
 
-  const createNewRequest = () => {
+  const createNewRequest = async () => {
     if (formData.Consumer_Name !== "" && formData.Query_Name !== "") {
-      axios
-        .get(`${baseURL}/${user.name}`, {
-          params: {
-            query: `select TEMPLATE_STATUS from DCR_PROVIDER2.CLEANROOM.TEMPLATES where CONSUMER_NAME = '${formData.Consumer_Name}' AND TEMPLATE_NAME = '${formData.Query_Name}';`,
-          },
-        })
-        .then((response) => {
-          if (response?.data?.data?.length > 0) {
-            let status = response?.data?.data[0]?.TEMPLATE_STATUS;
-            if (status) {
-              setOpen(!open);
-            } else {
-              setDisableTemplate(!disableTemplate);
-            }
+      const payload = {
+        account_name: user?.Consumer,
+        db_name: user?.consumerDBName,
+        template_name: formData?.Query_Name,
+        consumer_name: user?.Consumer,
+      };
+      try {
+        const response = await API.getTemplateStatus(payload);
+        if (
+          response.status === 200 &&
+          response?.data?.data &&
+          response?.data?.data?.length > 0
+        ) {
+          let status = response?.data?.data[0]?.TEMPLATE_STATUS;
+          if (status) {
+            setOpen(!open);
           } else {
             setDisableTemplate(!disableTemplate);
           }
-        })
-        .catch((error) => {
+        } else {
           setDisableTemplate(!disableTemplate);
-          console.log(error);
-        });
+        }
+      } catch (error) {
+        setDisableTemplate(!disableTemplate);
+        console.log(error);
+      }
     }
   };
 
   /// View the sample data...
 
-  const handleViewSample = () => {
-    console.log("isObjectEmpty(SampleFileData)", typeof SampleFileData);
+  const handleViewSample = async () => {
     if (
       SampleFileData &&
       SampleFileData !== "undefined" &&
@@ -281,32 +280,33 @@ const Enrichment = () => {
     ) {
       setOpenSampleData(true);
     } else {
-      axios
-        .get(`${baseURL}/${user?.name}`, {
-          params: {
-            query: "select * from DCR_PROVIDER2.CLEANROOM.CUSTOMERS_SAMPLE_VW;",
-          },
-        })
-        .then((response) => {
-          if (response?.data?.data) {
-            let head = [];
-            let row = [];
-            let data = response?.data?.data;
-            if (data?.length > 0) {
-              head = data && Object.keys(data[0]);
-              data?.map((obj) => {
-                return row.push(head?.map((key) => obj[key]));
-              });
-            }
-            setOpenSampleData(true);
-            dispatch(
-              actions.ConsumerQueryForm({
-                SampleFileData: { head: head, rows: row },
-              })
-            );
+      const payload = {
+        account_name: user?.name,
+        db_name: databaseName,
+      };
+      try {
+        const response = await API.enrichmentCustomerSampleView(payload);
+        // select * from DCR_PROVIDER2.CLEANROOM.CUSTOMERS_SAMPLE_VW;
+        if (response.status === 200 && response?.data?.data) {
+          let head = [];
+          let row = [];
+          let data = response?.data?.data;
+          if (data?.length > 0) {
+            head = data && Object.keys(data[0]);
+            data?.map((obj) => {
+              return row.push(head?.map((key) => obj[key]));
+            });
           }
-        })
-        .catch((error) => console.log(error));
+          setOpenSampleData(true);
+          dispatch(
+            actions.ConsumerQueryForm({
+              SampleFileData: { head: head, rows: row },
+            })
+          );
+        }
+      } catch (error) {
+        console.log(error);
+      }
     }
   };
 
@@ -348,83 +348,51 @@ const Enrichment = () => {
 
   const callByPassAPI = () => {
     setByPassAPICalled(true);
-    setTimeout(() => {
-      axios
-        .get(`${baseURL}/${user?.name}/procedure`, {
-          params: {
-            query: `call DCR_SAMP_CONSUMER1.PUBLIC.PROC_DATAHAVEN();`,
-          },
-        })
-        .then((response) => {
-          if (response) {
-            // fetchcsvTableData();
-            setByPassAPICalled(false);
-            setCallTable(false);
-            getStatusApi();
-          } else {
-            setByPassAPICalled(false);
-            setCallTable(false);
-            getStatusApi();
-            dispatch(
-              actions.ConsumerQueryForm({
-                fetchData: false,
-              })
-            );
-          }
-        })
-        .catch((error) => {
-          console.log(error);
+    handleClose();
+
+    setTimeout(async () => {
+      const payload = {
+        account_name: user?.Consumer,
+        db_name: user?.consumerDBName,
+      };
+      try {
+        const response = await API.callProcedureMatchRate(payload);
+        if (response.status === 200) {
           setByPassAPICalled(false);
-          setCallTable(false);
-          getStatusApi();
+          fetchMainTable();
+        } else {
+          setByPassAPICalled(false);
+          fetchMainTable();
           dispatch(
             actions.ConsumerQueryForm({
               fetchData: false,
             })
           );
-        });
-      setTimeout(() => {
-        setCallTable(true);
-        handleClose();
-      }, 2000);
-    }, 2000);
-  };
-
-  // For download the file from Table...
-
-  const downloadFile = (templateName, runId) => {
-    templateName = templateName.replace(/\s/g, "_");
-    axios
-      .get(`${baseURL}/${user?.name}`, {
-        responseType: "json", // Set the response type to JSON
-        params: {
-          query: `select * from DCR_SAMP_CONSUMER1.PUBLIC.${templateName}_${runId};`,
-        },
-      })
-      .then((response) => {
-        if (response?.data) {
-          const csvData = jsonToCsv(response?.data); // Create a Blob from the CSV data
-          downloadFileInCSV(csvData, templateName, runId);
-        } else {
-          console.log("File cannnot be downloaded...");
         }
-      })
-      .catch((error) => {
-        console.error("Error:", error);
-      });
+      } catch (error) {
+        console.log(error);
+        setByPassAPICalled(false);
+        fetchMainTable();
+        dispatch(
+          actions.ConsumerQueryForm({
+            fetchData: false,
+          })
+        );
+      }
+    }, 2000);
   };
 
   // For Submit the Request...
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    // handleClose();
 
     setLoading(true);
     setError1("");
 
-    const delimiter = "&";
-    const selectedColumns = `#${formData.Column_Names?.join(delimiter)}#`;
+    // const delimiter = "&";
+    // const selectedColumns = `#${formData.Column_Names?.join(delimiter)}#`;
+    const selectedColumns = `${formData.Column_Names?.join(",")}`;
 
     if (byPassAPICalled) {
       toast.error(
@@ -440,40 +408,65 @@ const Enrichment = () => {
     }
 
     formData.RunId = Date.now();
-
-    axios
-      .get(`${baseURL}/${user?.name}`, {
-        params: {
-          query: `insert into DCR_SAMP_CONSUMER1.PUBLIC.dcr_query_request1(template_name,provider_name,columns,consumer_name,run_id, attribute_value) values ('${formData.Query_Name}', '${formData.Provider_Name}','${selectedColumns}','${formData.Consumer_Name}','${formData.RunId}', '${formData.Attribute_Value}');`,
-        },
-      })
-      .then((response) => {
-        if (response) {
-          axios
-            .get(`${baseURL}/${formData?.Provider_Name}`, {
-              params: {
-                query: `insert into DCR_SAMP_PROVIDER_DB.ADMIN.RUNID_TABLE(run_id) values('${formData.RunId}');`,
-              },
-            })
-            .then((response) => {
-              if (response) {
-                dispatch(
-                  actions.ConsumerQueryForm({
-                    RequestId: formData?.RunId,
-                    fetchData: true,
-                  })
-                );
-                callByPassAPI();
-              }
-            })
-            .catch((error) => {
-              console.log(error);
-            });
+    const payload = {
+      account_name: user?.Consumer,
+      template_name: formData?.Query_Name,
+      provider_name: formData?.Provider_Name,
+      columns: selectedColumns,
+      consumer_name: formData?.Consumer_Name,
+      run_id: formData?.RunId,
+      attribute_value: formData?.Attribute_Value,
+      consumer_database_name: user?.consumerDBName,
+    };
+    try {
+      const response = await API.insertEnrichmentRequest(payload);
+      if (response.status === 200) {
+        const payload = {
+          account_name: formData?.Provider_Name,
+          db_name: user?.providerDBName,
+          run_id: formData.RunId,
+        };
+        try {
+          const response = await API.insertRunId(payload);
+          if (response.status === 200) {
+            dispatch(
+              actions.ConsumerQueryForm({
+                RequestId: formData?.RunId,
+                fetchData: true,
+              })
+            );
+            callByPassAPI();
+          }
+        } catch (error) {
+          console.log(error);
         }
-      })
-      .catch((error) => {
-        console.log(error);
-      });
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  // For download the file from Table...
+
+  const downloadFile = async (templateName, runId) => {
+    templateName = templateName.replace(/\s/g, "_");
+    const payload = {
+      account_name: user?.name,
+      db_name: user?.consumerDBName,
+      templateName: templateName,
+      run_id: runId,
+    };
+    try {
+      const response = await API.downloadFileAPI(payload);
+      if (response.status === 200 && response?.data) {
+        const csvData = jsonToCsv(response?.data); // Create a Blob from the CSV data
+        downloadFileInCSV(csvData, templateName, runId);
+      } else {
+        console.log("File cannnot be downloaded...");
+      }
+    } catch (error) {
+      console.log(error);
+    }
   };
 
   // FetchTable function logic and inserting data to the Redux store for table...
@@ -499,21 +492,21 @@ const Enrichment = () => {
 
   const fetchcsvTableData = async (templateName, runId) => {
     templateName = templateName.replace(/\s/g, "_");
-    axios
-      .get(`${baseURL}/${user?.name}`, {
-        params: {
-          query: `select * from DCR_SAMP_CONSUMER1.PUBLIC.${templateName}_${runId}_sample;`,
-        },
-      })
-      .then((response) => {
-        if (response?.data?.data) {
-          fetchTable(response?.data?.data, runId);
-          handleResultModalOpen();
-        }
-      })
-      .catch((error) => {
-        console.log("In API catch", error);
-      });
+    const payload = {
+      account_name: user?.name,
+      db_name: user?.consumerDBName,
+      templateName: templateName,
+      run_id: runId,
+    };
+    try {
+      const response = await API.viewSampleData(payload);
+      if (response.status === 200 && response?.data?.data) {
+        fetchTable(response?.data?.data, runId);
+        handleResultModalOpen();
+      }
+    } catch (error) {
+      console.log("In API catch", error);
+    }
   };
 
   // React Intro JS
@@ -656,7 +649,7 @@ const Enrichment = () => {
               </tr>
             </thead>
             <tbody className="text-amaranth-950 text-sm font-light">
-              {data.map((item, index) => (
+              {data?.map((item, index) => (
                 <tr
                   key={index}
                   className="border-b border-gray-200 hover:bg-amaranth-50"
